@@ -13,9 +13,11 @@ import (
 	"sync"
 
 	"github.com/ghchinoy/rss2mp3s/readfeed"
+	"github.com/araddon/dateparse"
 )
 
 func main() {
+	includeDate := flag.Bool("include_date", false, "Whether to prepend filenames with publish date in format yyyy-mm-dd. Default is false.")
 	max := flag.Int("max", 0, "Max number of episodes to download. Default is all episodes.")
 	retries := flag.Int("retries", 0, "Maximum number of retries for a failed download. Default is 0.")
 	parallel := flag.Int("parallel", 1, "Set the download parallelism. Default is 1.")
@@ -57,18 +59,18 @@ func main() {
 		waitGroup.Add(1)
 		limitChan <- true
 
-		go func(title, enclosureURL string) {
-			downloadEnclosure(title, enclosureURL, *retries, 0)
+		go func(title, enclosureURL string, pubDate string) {
+			downloadEnclosure(title, enclosureURL, pubDate, *retries, 0, *includeDate)
 			<-limitChan
 			waitGroup.Done()
-		}(items.Title, items.Enclosure.URL)
+		}(items.Title, items.Enclosure.URL, items.PubDate)
 	}
 
 	waitGroup.Wait()
 }
 
 // downloadEnclosure downloads the target enclosure URL to a local file
-func downloadEnclosure(title, enclosureURL string, retry int, attempt int) {
+func downloadEnclosure(title, enclosureURL string, pubDate string, retry int, attempt int, includeDate bool) {
 	title = strings.TrimSpace(title)
 
 	if attempt > retry {
@@ -81,12 +83,20 @@ func downloadEnclosure(title, enclosureURL string, retry int, attempt int) {
 	extFilename := parts[len(parts)-1:][0]
 	filename := title + filepath.Ext(extFilename)
 
+	if includeDate {
+		pubDateParsed, err :=  dateparse.ParseAny(pubDate)
+		if err != nil {
+			log.Printf("Error parsing date published %s: %v. Not prepended to filename.", pubDate, err)
+		}
+		filename = pubDateParsed.Format("2006-01-02") + " " + filename
+	}
+
 	var writer io.WriteCloser
 	writer, err := os.Create(filename)
 	if err != nil {
 		if attempt < retry {
 			log.Printf("Error downloading title %s: %v. Retrying...", title, err)
-			downloadEnclosure(title, enclosureURL, retry, attempt+1)
+			downloadEnclosure(title, enclosureURL, pubDate, retry, attempt+1, includeDate)
 		} else {
 			panic(err)
 		}
@@ -98,7 +108,7 @@ func downloadEnclosure(title, enclosureURL string, retry int, attempt int) {
 	if err != nil || r.StatusCode != http.StatusOK {
 		if attempt < retry {
 			log.Printf("Error downloading title %s: %v. Retrying...", title, err)
-			downloadEnclosure(title, enclosureURL, retry, attempt+1)
+			downloadEnclosure(title, enclosureURL, pubDate, retry, attempt+1, includeDate)
 		} else {
 			panic(err)
 		}
@@ -109,7 +119,7 @@ func downloadEnclosure(title, enclosureURL string, retry int, attempt int) {
 	if errClose := r.Body.Close(); err != nil || errClose != nil {
 		if attempt < retry {
 			log.Printf("Error downloading title %s: %v. Retrying...", title, err)
-			downloadEnclosure(title, enclosureURL, retry, attempt+1)
+			downloadEnclosure(title, enclosureURL, pubDate, retry, attempt+1, includeDate)
 		} else {
 			panic(err)
 		}
