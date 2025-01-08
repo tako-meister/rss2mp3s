@@ -26,7 +26,7 @@ func main() {
 	flag.Parse()
 
 	//only allow a subset of characters for dateFormat string
-	reg, _ := regexp.Compile("[^a-zA-Z0-9-_ :()\\[\\]{}]")
+	reg, _ := regexp.Compile("[^a-zA-Z0-9-_ :.,()\\[\\]{}]")
 	*dateFormat = reg.ReplaceAllString(*dateFormat, "")
 
 	if *parallel < 1 {
@@ -86,6 +86,9 @@ func downloadEnclosure(title, enclosureURL string, pubDate string, retry int, at
 	// create a filename from the track title and suffix
 	parts := strings.Split(enclosureURL, "/")
 	extFilename := parts[len(parts)-1:][0]
+	//remove any querystring if exists
+	reg, _ := regexp.Compile("([^?]*).*")
+	extFilename = reg.ReplaceAllString(extFilename, "$1")
 	filename := title + filepath.Ext(extFilename)
 
 	if dateFormat != "" {
