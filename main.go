@@ -18,7 +18,7 @@ import (
 )
 
 func main() {
-	dateFormat := flag.String("date_format", "", "To prepend filenames with publish date, supply desired date format e.g. \"2006-01-02 15:04:05\". Default is not to prepend date information.")
+	dateFormat := flag.String("date_format", "", "To prepend filenames with publish date, supply desired golang date format e.g. \"2006-01-02 15:04:05\". Default is not to prepend date information.")
 	max := flag.Int("max", 0, "Max number of episodes to download. Default is all episodes.")
 	retries := flag.Int("retries", 0, "Maximum number of retries for a failed download. Default is 0.")
 	parallel := flag.Int("parallel", 1, "Set the download parallelism. Default is 1.")
