@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -17,12 +18,16 @@ import (
 )
 
 func main() {
-	includeDate := flag.Bool("include_date", false, "Whether to prepend filenames with publish date in format yyyy-mm-dd. Default is false.")
+	dateFormat := flag.String("date_format", "", "To prepend filenames with publish date, supply desired date format e.g. \"2006-01-02 15:04:05\". Default is not to prepend date information.")
 	max := flag.Int("max", 0, "Max number of episodes to download. Default is all episodes.")
 	retries := flag.Int("retries", 0, "Maximum number of retries for a failed download. Default is 0.")
 	parallel := flag.Int("parallel", 1, "Set the download parallelism. Default is 1.")
 	uri := flag.String("rss", "", "rss feed URL")
 	flag.Parse()
+
+	//only allow a subset of characters for dateFormat string
+	reg, _ := regexp.Compile("[^a-zA-Z0-9-_ :()\\[\\]{}]")
+	*dateFormat = reg.ReplaceAllString(*dateFormat, "")
 
 	if *parallel < 1 {
 		log.Fatalf("Invalid parallelism value: %d", *parallel)
@@ -60,7 +65,7 @@ func main() {
 		limitChan <- true
 
 		go func(title, enclosureURL string, pubDate string) {
-			downloadEnclosure(title, enclosureURL, pubDate, *retries, 0, *includeDate)
+			downloadEnclosure(title, enclosureURL, pubDate, *retries, 0, *dateFormat)
 			<-limitChan
 			waitGroup.Done()
 		}(items.Title, items.Enclosure.URL, items.PubDate)
@@ -70,7 +75,7 @@ func main() {
 }
 
 // downloadEnclosure downloads the target enclosure URL to a local file
-func downloadEnclosure(title, enclosureURL string, pubDate string, retry int, attempt int, includeDate bool) {
+func downloadEnclosure(title, enclosureURL string, pubDate string, retry int, attempt int, dateFormat string) {
 	title = strings.TrimSpace(title)
 
 	if attempt > retry {
@@ -83,12 +88,12 @@ func downloadEnclosure(title, enclosureURL string, pubDate string, retry int, at
 	extFilename := parts[len(parts)-1:][0]
 	filename := title + filepath.Ext(extFilename)
 
-	if includeDate {
+	if dateFormat != "" {
 		pubDateParsed, err :=  dateparse.ParseAny(pubDate)
 		if err != nil {
 			log.Printf("Error parsing date published %s: %v. Not prepended to filename.", pubDate, err)
 		}
-		filename = pubDateParsed.Format("2006-01-02") + " " + filename
+		filename = pubDateParsed.Format(dateFormat) + " " + filename
 	}
 
 	var writer io.WriteCloser
@@ -96,7 +101,7 @@ func downloadEnclosure(title, enclosureURL string, pubDate string, retry int, at
 	if err != nil {
 		if attempt < retry {
 			log.Printf("Error downloading title %s: %v. Retrying...", title, err)
-			downloadEnclosure(title, enclosureURL, pubDate, retry, attempt+1, includeDate)
+			downloadEnclosure(title, enclosureURL, pubDate, retry, attempt+1, dateFormat)
 		} else {
 			panic(err)
 		}
@@ -108,7 +113,7 @@ func downloadEnclosure(title, enclosureURL string, pubDate string, retry int, at
 	if err != nil || r.StatusCode != http.StatusOK {
 		if attempt < retry {
 			log.Printf("Error downloading title %s: %v. Retrying...", title, err)
-			downloadEnclosure(title, enclosureURL, pubDate, retry, attempt+1, includeDate)
+			downloadEnclosure(title, enclosureURL, pubDate, retry, attempt+1, dateFormat)
 		} else {
 			panic(err)
 		}
@@ -119,7 +124,7 @@ func downloadEnclosure(title, enclosureURL string, pubDate string, retry int, at
 	if errClose := r.Body.Close(); err != nil || errClose != nil {
 		if attempt < retry {
 			log.Printf("Error downloading title %s: %v. Retrying...", title, err)
-			downloadEnclosure(title, enclosureURL, pubDate, retry, attempt+1, includeDate)
+			downloadEnclosure(title, enclosureURL, pubDate, retry, attempt+1, dateFormat)
 		} else {
 			panic(err)
 		}
